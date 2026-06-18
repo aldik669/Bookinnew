@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Календарь МК</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Календарь МК</h1>
+      <div class="status">
+        <span id="status-dot" class="status-dot status-ok"></span>
+        <span id="status-text">подключение…</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="view-toggle">
+        <button id="view-week" class="toggle-btn active">Неделя</button>
+        <button id="view-day" class="toggle-btn">День</button>
+      </div>
+      <div class="nav-controls">
+        <button id="nav-prev" class="nav-btn" aria-label="Назад">←</button>
+        <button id="nav-today" class="nav-btn nav-today">Сегодня</button>
+        <button id="nav-next" class="nav-btn" aria-label="Вперёд">→</button>
+      </div>
+      <div id="period-label" class="period-label"></div>
+    </div>
+  </header>
+
+  <section class="summary-bar" id="summary-bar">
+    <span class="summary-item"><span class="summary-num" id="sum-total">0</span> записей за неделю</span>
+    <span class="summary-sep">·</span>
+    <span class="summary-item summary-warn"><span class="summary-num" id="sum-high">0</span> почти заполнено</span>
+    <span class="summary-sep">·</span>
+    <span class="summary-item summary-full"><span class="summary-num" id="sum-full">0</span> заполнено</span>
+    <span class="summary-sep">·</span>
+    <span class="summary-item summary-free"><span class="summary-num" id="sum-free">0</span> слотов свободно</span>
+  </section>
+
+  <main class="grid-wrap">
+    <div id="calendar-grid" class="calendar-grid"></div>
+  </main>
+
+  <footer class="legend">
+    <span class="legend-title">Загрузка слота:</span>
+    <span class="legend-item"><i class="swatch swatch-empty"></i>0 — можно записать</span>
+    <span class="legend-item"><i class="swatch swatch-low"></i>1–8 — свободно</span>
+    <span class="legend-item"><i class="swatch swatch-medium"></i>9–12 — заполняется</span>
+    <span class="legend-item"><i class="swatch swatch-high"></i>13–15 — почти полно</span>
+    <span class="legend-item"><i class="swatch swatch-full"></i>16 — полно</span>
+    <span class="legend-item"><i class="swatch swatch-over"></i>&gt;16 — перебор</span>
+  </footer>
+
+  <aside id="side-panel" class="side-panel">
+    <div class="side-panel-header">
+      <div>
+        <div class="side-panel-date" id="panel-date"></div>
+        <div class="side-panel-type" id="panel-type"></div>
+      </div>
+      <button id="panel-close" class="panel-close" aria-label="Закрыть">×</button>
+    </div>
+    <div class="side-panel-free" id="panel-free"></div>
+    <div class="side-panel-people" id="panel-people"></div>
+    <button class="panel-book-btn" disabled title="Запись из календаря пока не подключена">+ Записать (скоро)</button>
+  </aside>
+  <div id="side-panel-overlay" class="side-panel-overlay"></div>
+
+  <script src="calendar.js"></script>
+</body>
+</html>
