@@ -161,7 +161,11 @@
       const isWeekend = dow >= 5;
       cell.className =
         'grid-header-cell' + (isToday ? ' is-today' : '') + (isWeekend ? ' is-weekend' : '');
-      cell.innerHTML = `<div class="wd">${WEEKDAYS_RU[dow]}</div><div class="dd">${formatShort(d)}</div>`;
+      const dayTotal = times.reduce((sum, time) => {
+        const slot = lookup.get(`${dateKey(d)}_${time}`);
+        return sum + (slot ? slot.booked : 0);
+      }, 0);
+      cell.innerHTML = `<div class="day-total">${dayTotal}</div><div class="wd">${WEEKDAYS_RU[dow]}</div><div class="dd">${formatShort(d)}</div>`;
       els.grid.appendChild(cell);
     });
 

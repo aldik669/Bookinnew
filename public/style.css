@@ -184,8 +184,15 @@ button {
   z-index: 4;
   border-left: none;
 }
+.grid-header-cell .day-total {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1.2;
+}
 .grid-header-cell .wd { font-weight: 700; color: var(--text); }
 .grid-header-cell .dd { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+.grid-header-cell.is-today .day-total { color: #9fc4ff; }
 
 .grid-header-cell.is-today { background: #233047; }
 .grid-header-cell.is-today .wd { color: #9fc4ff; }
