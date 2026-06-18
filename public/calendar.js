@@ -165,7 +165,7 @@
         const slot = lookup.get(`${dateKey(d)}_${time}`);
         return sum + (slot ? slot.booked : 0);
       }, 0);
-      cell.innerHTML = `<div class="day-total">${dayTotal}</div><div class="wd">${WEEKDAYS_RU[dow]}</div><div class="dd">${formatShort(d)}</div>`;
+      cell.innerHTML = `<div class="hdr-top"><span class="wd">${WEEKDAYS_RU[dow]}</span><span class="day-total">${dayTotal}</span></div><div class="dd">${formatShort(d)}</div>`;
       els.grid.appendChild(cell);
     });
 
