@@ -67,29 +67,61 @@ function getCustomFieldByNameContains(lead, substr) {
   return fields.find((f) => f.field_name && f.field_name.toLowerCase().includes(substr.toLowerCase())) || null;
 }
 
-// Значение бывает unix-таймстампом (число/строка-число) или строкой вида
-// "18.06.2026 17:00:00" / ISO-строкой.
+// Часовой пояс бизнеса — Asia/Almaty, фиксированный UTC+5 (Казахстан с 2024 года
+// живёт в одном поясе без перехода на летнее время). Все даты ниже хранятся не как
+// настоящие моменты времени, а как "гражданское" время Алматы, упакованное в Date
+// через UTC-методы — это даёт одинаковый результат независимо от часового пояса
+// хоста, на котором запущен сервер (важно для деплоя, где TZ контейнера может быть UTC).
+const BUSINESS_TZ_OFFSET_MIN = 5 * 60;
+
+function toBusinessRepresentation(absoluteDate) {
+  const shifted = new Date(absoluteDate.getTime() + BUSINESS_TZ_OFFSET_MIN * 60 * 1000);
+  return new Date(
+    Date.UTC(
+      shifted.getUTCFullYear(),
+      shifted.getUTCMonth(),
+      shifted.getUTCDate(),
+      shifted.getUTCHours(),
+      shifted.getUTCMinutes(),
+      shifted.getUTCSeconds()
+    )
+  );
+}
+
+function nowInBusinessTz() {
+  return toBusinessRepresentation(new Date());
+}
+
+// Значение бывает unix-таймстампом (число/строка-число, абсолютный момент времени)
+// или строкой вида "18.06.2026 17:00:00" / ISO без смещения (уже гражданское время
+// Алматы, как его ввели в amoCRM) / ISO со смещением (абсолютный момент времени).
 function parseMkDate(rawValue) {
   if (rawValue == null) return null;
 
   if (typeof rawValue === 'number') {
-    return new Date(rawValue * 1000);
+    return toBusinessRepresentation(new Date(rawValue * 1000));
   }
 
   const str = String(rawValue).trim();
   if (/^\d+$/.test(str)) {
-    return new Date(Number(str) * 1000);
+    return toBusinessRepresentation(new Date(Number(str) * 1000));
   }
 
   const ddmmyyyy = str.match(/^(\d{2})\.(\d{2})\.(\d{4})[ T]?(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (ddmmyyyy) {
     const [, dd, mm, yyyy, hh, min, ss] = ddmmyyyy;
-    return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss || 0));
+    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss || 0)));
+  }
+
+  const isoNoOffset = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})$/);
+  if (isoNoOffset) {
+    const [, yyyy, mm, dd, hh, min, ss] = isoNoOffset;
+    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss)));
   }
 
   const isoLike = new Date(str);
   if (!Number.isNaN(isoLike.getTime())) {
-    return isoLike;
+    return toBusinessRepresentation(isoLike);
   }
 
   return null;
@@ -107,15 +139,15 @@ function pad2(n) {
 }
 
 function formatDate(d) {
-  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+  return `${pad2(d.getUTCDate())}.${pad2(d.getUTCMonth() + 1)}.${d.getUTCFullYear()}`;
 }
 
 function formatTime(d) {
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
 function slotKey(d) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
 async function fetchContactsByIds(cfg, ids) {
@@ -141,7 +173,7 @@ async function buildSlotsData() {
   assertConfig(cfg);
 
   const leads = await fetchAllLeads(cfg);
-  const now = new Date();
+  const now = nowInBusinessTz();
 
   const slotsMap = new Map();
 
@@ -188,11 +220,11 @@ async function buildSlotsData() {
 
       return {
         key,
-        datetime: `${slot.date.getFullYear()}-${pad2(slot.date.getMonth() + 1)}-${pad2(slot.date.getDate())}T${pad2(
-          slot.date.getHours()
-        )}:${pad2(slot.date.getMinutes())}:00`,
+        datetime: `${slot.date.getUTCFullYear()}-${pad2(slot.date.getUTCMonth() + 1)}-${pad2(
+          slot.date.getUTCDate()
+        )}T${pad2(slot.date.getUTCHours())}:${pad2(slot.date.getUTCMinutes())}:00`,
         date: formatDate(slot.date),
-        weekday: WEEKDAYS_RU[slot.date.getDay()],
+        weekday: WEEKDAYS_RU[slot.date.getUTCDay()],
         time: formatTime(slot.date),
         type,
         booked,
