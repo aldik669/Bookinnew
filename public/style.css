@@ -225,8 +225,17 @@ button {
 .slot-cell {
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
-  position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 78px;
+}
+
+/* Обычно одна полоса на ячейку. По выходным время может делиться между двумя
+   возрастными группами в разных кабинетах — тогда полосы стопкой делят ячейку
+   пополам, каждая со своим цветом и кликом. */
+.slot-band {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -235,9 +244,8 @@ button {
   cursor: pointer;
   transition: filter 0.1s ease;
 }
-.slot-cell:hover { filter: brightness(1.12); }
-
-.slot-cell.is-weekend-col { background-blend-mode: normal; }
+.slot-band:hover { filter: brightness(1.12); }
+.slot-cell-multi .slot-band + .slot-band { border-top: 1px solid rgba(0, 0, 0, 0.35); }
 
 .slot-empty {
   background: var(--c-empty-bg);
@@ -255,6 +263,7 @@ button {
   font-weight: 800;
   line-height: 1.1;
 }
+.slot-cell-multi .slot-count { font-size: 16px; }
 .slot-empty .slot-count { font-size: 13px; font-weight: 600; opacity: 0.8; }
 
 .slot-meta {

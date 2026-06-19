@@ -118,11 +118,23 @@
 
     const times = [...new Set(relevant.map((s) => s.time))].sort();
 
-    const lookup = new Map();
-    relevant.forEach((s) => lookup.set(`${dateKey(parseSlotDate(s))}_${s.time}`, s));
+    const lookup = buildLookup(relevant, (s) => dateKey(parseSlotDate(s)));
 
     buildGrid(days, times, lookup, today);
     updateSummary(days, times, lookup);
+  }
+
+  // Несколько сделок могут делить одну и ту же дату+время (например, по выходным
+  // две возрастные группы идут параллельно в разных кабинетах) — поэтому ключ
+  // ведёт на массив слотов, а не на один слот.
+  function buildLookup(relevant, dayKeyOf) {
+    const lookup = new Map();
+    relevant.forEach((s) => {
+      const key = `${dayKeyOf(s)}_${s.time}`;
+      if (!lookup.has(key)) lookup.set(key, []);
+      lookup.get(key).push(s);
+    });
+    return lookup;
   }
 
   function renderDay() {
@@ -138,8 +150,7 @@
     els.periodLabel.textContent = `${WEEKDAYS_RU[(day.getDay() + 6) % 7]}, ${formatShort(day)}.${day.getFullYear()}`;
 
     const times = [...new Set(relevant.map((s) => s.time))].sort();
-    const lookup = new Map();
-    relevant.forEach((s) => lookup.set(`${dateKey(day)}_${s.time}`, s));
+    const lookup = buildLookup(relevant, () => dateKey(day));
 
     buildGrid([day], times, lookup, today);
     updateSummary([day], times, lookup);
@@ -162,8 +173,8 @@
       cell.className =
         'grid-header-cell' + (isToday ? ' is-today' : '') + (isWeekend ? ' is-weekend' : '');
       const dayTotal = times.reduce((sum, time) => {
-        const slot = lookup.get(`${dateKey(d)}_${time}`);
-        return sum + (slot ? slot.booked : 0);
+        const slots = lookup.get(`${dateKey(d)}_${time}`) || [];
+        return sum + slots.reduce((s, slot) => s + slot.booked, 0);
       }, 0);
       cell.innerHTML = `<div class="hdr-top"><span class="wd">${WEEKDAYS_RU[dow]}</span><span class="day-total">${dayTotal}</span></div><div class="dd">${formatShort(d)}</div>`;
       els.grid.appendChild(cell);
@@ -188,50 +199,53 @@
 
       days.forEach((d) => {
         const key = `${dateKey(d)}_${time}`;
-        const slot = lookup.get(key);
-        const data = slot || classifyVirtual();
-        els.grid.appendChild(buildSlotCell(d, time, data));
+        const slots = lookup.get(key);
+        const bands = slots && slots.length ? slots : [classifyVirtual()];
+        els.grid.appendChild(buildSlotCell(d, time, bands));
       });
     });
   }
 
-  function buildSlotCell(date, time, data) {
+  // bands — 1 запись в обычном случае, 2 по выходным (две возрастные группы
+  // параллельно в разных кабинетах в одно и то же время) — рисуются стопкой
+  // внутри одной ячейки, каждая со своим цветом/кликом.
+  function buildSlotCell(date, time, bands) {
     const cell = document.createElement('div');
-    cell.className = `slot-cell slot-${data.status}`;
+    cell.className = 'slot-cell' + (bands.length > 1 ? ' slot-cell-multi' : '');
 
-    const count = document.createElement('div');
-    count.className = 'slot-count';
-    count.textContent = data.status === 'empty' ? 'свободно' : `${data.booked} / ${state.limit}`;
-    cell.appendChild(count);
+    bands.forEach((data) => {
+      const band = document.createElement('div');
+      band.className = `slot-band slot-${data.status}`;
 
-    if (data.status !== 'empty') {
+      const count = document.createElement('div');
+      count.className = 'slot-count';
+      count.textContent = data.status === 'empty' ? 'свободно' : `${data.booked} / ${state.limit}`;
+      band.appendChild(count);
+
       const meta = document.createElement('div');
       meta.className = 'slot-meta';
-      meta.textContent = `${data.type || ''} · ${time}`;
-      cell.appendChild(meta);
-    } else {
-      const meta = document.createElement('div');
-      meta.className = 'slot-meta';
-      meta.textContent = time;
-      cell.appendChild(meta);
-    }
+      meta.textContent = data.status === 'empty' ? time : `${data.type || ''} · ${time}`;
+      band.appendChild(meta);
 
-    if (data.status === 'over') {
-      const tag = document.createElement('div');
-      tag.className = 'slot-over-tag';
-      tag.textContent = 'ПЕРЕБОР';
-      cell.appendChild(tag);
-    }
+      if (data.status === 'over') {
+        const tag = document.createElement('div');
+        tag.className = 'slot-over-tag';
+        tag.textContent = 'ПЕРЕБОР';
+        band.appendChild(tag);
+      }
 
-    if (data.status !== 'empty') {
-      const pct = Math.min(100, Math.round((data.booked / state.limit) * 100));
-      const bar = document.createElement('div');
-      bar.className = 'slot-progress';
-      bar.style.width = pct + '%';
-      cell.appendChild(bar);
-    }
+      if (data.status !== 'empty') {
+        const pct = Math.min(100, Math.round((data.booked / state.limit) * 100));
+        const bar = document.createElement('div');
+        bar.className = 'slot-progress';
+        bar.style.width = pct + '%';
+        band.appendChild(bar);
+      }
 
-    cell.addEventListener('click', () => openPanel(date, time, data));
+      band.addEventListener('click', () => openPanel(date, time, data));
+      cell.appendChild(band);
+    });
+
     return cell;
   }
 
@@ -243,12 +257,14 @@
 
     days.forEach((d) => {
       times.forEach((time) => {
-        const slot = lookup.get(`${dateKey(d)}_${time}`);
-        const data = slot || classifyVirtual();
-        total += data.booked;
-        if (data.status === 'high') high += 1;
-        if (data.status === 'full' || data.status === 'over') full += 1;
-        if (data.status === 'empty') free += 1;
+        const slots = lookup.get(`${dateKey(d)}_${time}`);
+        const bands = slots && slots.length ? slots : [classifyVirtual()];
+        bands.forEach((data) => {
+          total += data.booked;
+          if (data.status === 'high') high += 1;
+          if (data.status === 'full' || data.status === 'over') full += 1;
+          if (data.status === 'empty') free += 1;
+        });
       });
     });
 

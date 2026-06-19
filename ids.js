@@ -38,9 +38,9 @@ async function printPipelines() {
 }
 
 async function printFields() {
-  console.log('\n=== ПОЛЯ СДЕЛОК (содержащие "мк", "дата" или "время") ===');
+  console.log('\n=== ПОЛЯ СДЕЛОК (содержащие "мк", "дата", "время", "групп" или "возр") ===');
   let page = 1;
-  const keywords = ['мк', 'дата', 'время'];
+  const keywords = ['мк', 'дата', 'время', 'групп', 'возр'];
   while (true) {
     const data = await amoFetch(`/api/v4/leads/custom_fields?page=${page}&limit=250`);
     const fields = (data && data._embedded && data._embedded.custom_fields) || [];
@@ -48,7 +48,10 @@ async function printFields() {
     for (const f of fields) {
       const nameLower = f.name.toLowerCase();
       if (keywords.some((k) => nameLower.includes(k))) {
-        console.log(`  - "${f.name}" (${f.type})  AMO_FIELD_MK_ID=${f.id}`);
+        console.log(`  - "${f.name}" (${f.type})  field_id=${f.id}`);
+        if (f.enums) {
+          for (const e of f.enums) console.log(`      enum_id=${e.id}  value="${e.value}"`);
+        }
       }
     }
     if (!data._links || !data._links.next) break;

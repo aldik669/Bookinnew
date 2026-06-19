@@ -9,6 +9,11 @@ function getConfig() {
     pipelineId: process.env.AMO_PIPELINE_ID,
     statusId: process.env.AMO_STATUS_ID,
     fieldMkId: process.env.AMO_FIELD_MK_ID,
+    // Новая система расписаний (по возрастным группам). Опциональны: если не заданы,
+    // слоты считаются только по старому полю fieldMkId — старое расписание не ломается.
+    fieldDateMkId: process.env.AMO_FIELD_DATE_MK_ID || null,
+    fieldTimeWeekdayId: process.env.AMO_FIELD_TIME_WEEKDAY_ID || null,
+    fieldTimeWeekendId: process.env.AMO_FIELD_TIME_WEEKEND_ID || null,
     slotLimit: Number(process.env.SLOT_LIMIT || 16),
   };
 }
@@ -107,10 +112,10 @@ function parseMkDate(rawValue) {
     return toBusinessRepresentation(new Date(Number(str) * 1000));
   }
 
-  const ddmmyyyy = str.match(/^(\d{2})\.(\d{2})\.(\d{4})[ T]?(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  const ddmmyyyy = str.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
   if (ddmmyyyy) {
     const [, dd, mm, yyyy, hh, min, ss] = ddmmyyyy;
-    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss || 0)));
+    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh || 0), Number(min || 0), Number(ss || 0)));
   }
 
   const isoNoOffset = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})$/);
@@ -132,6 +137,58 @@ function getSlotType(lead) {
   const value = field && field.values && field.values[0] && field.values[0].value;
   const str = value == null ? '' : String(value).toLowerCase();
   return str.includes('индивид') ? 'Индив' : 'Группа';
+}
+
+function getFieldValue(lead, fieldId) {
+  if (!fieldId) return null;
+  const field = getCustomFieldById(lead, fieldId);
+  return (field && field.values && field.values[0] && field.values[0].value) ?? null;
+}
+
+// Поля "ВРЕМЯ МК будни"/"ВРЕМЯ МК выходной" хранят время и возрастную группу в одном
+// select-значении, например "10:30 / 9-11 группа" (будни) или "10:30 / 6-8" (выходной).
+function parseTimeGroup(rawValue) {
+  if (rawValue == null) return null;
+  const m = String(rawValue)
+    .trim()
+    .match(/^(\d{1,2}:\d{2})\s*\/\s*(.+)$/);
+  if (!m) return null;
+  const time = m[1];
+  const group = m[2].replace(/\s*групп[а-я]*\s*$/i, '').trim();
+  return { time, group };
+}
+
+function combineDateAndTime(dateRepr, timeStr) {
+  const [hh, mm] = timeStr.split(':').map(Number);
+  return new Date(Date.UTC(dateRepr.getUTCFullYear(), dateRepr.getUTCMonth(), dateRepr.getUTCDate(), hh, mm, 0));
+}
+
+// Возвращает { date, type, groupKey } для сделки. Новая система расписаний (поле
+// "ДАТА МК" + "ВРЕМЯ МК будни"/"ВРЕМЯ МК выходной") имеет приоритет, если заполнена;
+// иначе — старое поле "Дата и Время МК (свое)" (как было раньше, без изменений).
+// groupKey пустой для старой системы, чтобы её слоты группировались как раньше
+// (только по дате+времени); для новой системы groupKey = возрастная группа, поэтому
+// две параллельные группы в одно и то же время по выходным не объединяются.
+function getMkSlotInfo(lead, cfg) {
+  const newDateRaw = getFieldValue(lead, cfg.fieldDateMkId);
+  if (newDateRaw != null) {
+    const datePart = parseMkDate(newDateRaw);
+    const timeGroup =
+      parseTimeGroup(getFieldValue(lead, cfg.fieldTimeWeekdayId)) ||
+      parseTimeGroup(getFieldValue(lead, cfg.fieldTimeWeekendId));
+    if (datePart && timeGroup) {
+      return {
+        date: combineDateAndTime(datePart, timeGroup.time),
+        type: timeGroup.group,
+        groupKey: timeGroup.group,
+      };
+    }
+  }
+
+  const legacyRaw = getFieldValue(lead, cfg.fieldMkId);
+  const legacyDate = parseMkDate(legacyRaw);
+  if (!legacyDate) return null;
+  return { date: legacyDate, type: getSlotType(lead), groupKey: '' };
 }
 
 function pad2(n) {
@@ -178,21 +235,19 @@ async function buildSlotsData() {
   const slotsMap = new Map();
 
   for (const lead of leads) {
-    const field = getCustomFieldById(lead, cfg.fieldMkId);
-    const rawValue = field && field.values && field.values[0] && field.values[0].value;
-    const mkDate = parseMkDate(rawValue);
-    if (!mkDate || mkDate < now) continue;
+    const info = getMkSlotInfo(lead, cfg);
+    if (!info || !info.date || info.date < now) continue;
 
-    const key = slotKey(mkDate);
+    const key = `${slotKey(info.date)}_${info.groupKey}`;
     if (!slotsMap.has(key)) {
       slotsMap.set(key, {
-        date: mkDate,
+        date: info.date,
         types: [],
         leadContactIds: [],
       });
     }
     const slot = slotsMap.get(key);
-    slot.types.push(getSlotType(lead));
+    slot.types.push(info.type);
 
     const mainContact =
       lead._embedded && lead._embedded.contacts && lead._embedded.contacts[0];
